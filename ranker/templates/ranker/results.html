@@ -171,6 +171,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let scoreFilter = 'all';
 let searchVal = '';
@@ -253,9 +254,14 @@ function renderDetail(d) {
     ${profile.location ? `<div class="detail-loc">📍 ${profile.location}, ${profile.country || ''}</div>` : ''}
     ${profile.years_of_experience !== undefined ? `<div class="detail-exp">⏱ ${profile.years_of_experience} years experience</div>` : ''}
 
-    <div class="detail-section">
-      <h4>Component Scores</h4>
-      <div class="detail-comps">${compRows}</div>
+    <div class="detail-section" style="display:flex; flex-direction:row; gap:20px; align-items:flex-start;">
+      <div style="flex:1;">
+        <h4>Component Scores</h4>
+        <div class="detail-comps">${compRows}</div>
+      </div>
+      <div style="width:250px; height:250px; display:flex; justify-content:center; align-items:center;">
+        <canvas id="radarChart"></canvas>
+      </div>
     </div>
 
     <div class="detail-section">
@@ -286,6 +292,47 @@ function renderDetail(d) {
       </span>` : ''}
     </div>` : ''}
   `;
+
+  // Draw the Radar Chart
+  setTimeout(() => {
+    const ctx = document.getElementById('radarChart');
+    if (ctx) {
+      new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: ['Skill', 'Title', 'Exp', 'Edu', 'Signals'],
+          datasets: [{
+            label: 'Candidate Profile',
+            data: [
+              comps.skill_score || 0,
+              comps.title_career_score || 0,
+              comps.experience_score || 0,
+              comps.education_score || 0,
+              comps.signal_score || 0
+            ],
+            fill: true,
+            backgroundColor: 'rgba(125, 69, 224, 0.2)',
+            borderColor: 'rgb(125, 69, 224)',
+            pointBackgroundColor: 'rgb(125, 69, 224)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgb(125, 69, 224)'
+          }]
+        },
+        options: {
+          scales: {
+            r: {
+              angleLines: { color: 'rgba(255, 255, 255, 0.2)' },
+              grid: { color: 'rgba(0, 0, 0, 0.1)' },
+              pointLabels: { color: '#4a5568', font: { family: 'Manrope', size: 10 } },
+              ticks: { display: false, min: 0, max: 1 }
+            }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+  }, 50);
 }
 
 function closeModal() {

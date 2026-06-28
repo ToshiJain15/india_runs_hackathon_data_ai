@@ -13,6 +13,10 @@ from django.views.decorators.http import require_http_methods
 from .models import RankingRun, RankedCandidate
 from .ml.pipeline import run_pipeline, write_submission_csv
 from .ml.scorer import DEFAULT_JOB, parse_job_description, strip_html
+import threading
+import uuid
+
+TASK_STATUS = {}
 
 
 @ensure_csrf_cookie
@@ -100,10 +104,11 @@ def analytics_view(request, run_id=None):
 
 @require_http_methods(["POST"])
 def run_ranking(request):
-    """API endpoint: trigger a new ranking run."""
+    """API endpoint: trigger a new ranking run using async threading."""
     import json
     import os
     import tempfile
+    import uuid
     from pathlib import Path
 
     # Handle standard JSON vs FormData
@@ -114,6 +119,7 @@ def run_ranking(request):
         weights = json.loads(weights_str) if weights_str else None
         uploaded_file = request.FILES.get("file")
         max_candidates = int(request.POST.get("max_candidates", 0))
+        jd_text = request.POST.get("jd_text", "").strip()
     else:
         try:
             body = json.loads(request.body) if request.body else {}
@@ -124,21 +130,16 @@ def run_ranking(request):
         weights = body.get("weights", None)
         uploaded_file = None
         max_candidates = int(body.get("max_candidates", 0))
+        jd_text = body.get("jd_text", "").strip()
 
     jd = dict(DEFAULT_JOB)  # copy to avoid mutating the module-level default
-    
-    # If user pasted a raw JD, parse it dynamically
-    if request.content_type and request.content_type.startswith('multipart/form-data'):
-        jd_text = request.POST.get("jd_text", "").strip()
-    else:
-        jd_text = body.get("jd_text", "").strip() if 'body' in locals() else ""
-    
     if jd_text and len(jd_text) > 50:
         jd = parse_job_description(jd_text)
     elif job_title:
         jd["title"] = job_title
 
     # Determine candidates path based on data source
+    tmp_path = None
     if data_source == "sample":
         candidates_path = settings.SAMPLE_CANDIDATES_JSON
     elif data_source == "upload" and uploaded_file:
@@ -152,27 +153,17 @@ def run_ranking(request):
             try:
                 from .ml.extraction import RobustPDFExtractor
                 import json
-                
                 extractor = RobustPDFExtractor(jd=jd)
                 mock_cand, text = extractor.extract(tmp_path)
-                
-                # Write text to a file safely to avoid Windows console charmap encoding exceptions
-                debug_txt_path = settings.BASE_DIR.parent / "extracted_pdf_text.txt"
-                with open(debug_txt_path, "w", encoding="utf-8", errors="replace") as df:
-                    df.write(text)
-                
                 with open(tmp_path, "w", encoding="utf-8") as f:
                     json.dump(mock_cand, f)
             except Exception as e:
-                import traceback
-                traceback.print_exc()
                 return JsonResponse({"error": f"Failed to parse PDF: {str(e)}"}, status=400)
                 
         candidates_path = tmp_path
     else:
         candidates_path = settings.CANDIDATES_JSONL
 
-    # Determine if it's a JSON array (use_sample=True) or JSONL (use_sample=False)
     if data_source == "sample":
         use_sample_flag = True
     elif data_source == "upload" and uploaded_file:
@@ -181,72 +172,92 @@ def run_ranking(request):
     else:
         use_sample_flag = False
 
-    tmp_path_to_clean = None
-    try:
-        result = run_pipeline(
-            candidates_path=candidates_path,
-            job=jd,
-            weights=weights,
-            max_candidates=max_candidates,
-            top_n=100,
-            use_sample=use_sample_flag,
-        )
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-    finally:
-        # Always clean up temp uploaded files to prevent disk leak
-        if data_source == "upload" and 'tmp_path' in locals():
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+    task_id = str(uuid.uuid4())
+    TASK_STATUS[task_id] = {"status": "started", "progress": 5, "message": "Initializing pipeline..."}
 
-    if "error" in result:
-        return JsonResponse(result, status=400)
+    def background_task():
+        try:
+            TASK_STATUS[task_id]["progress"] = 25
+            TASK_STATUS[task_id]["message"] = "Loading candidate profiles & computing match scores..."
+            
+            result = run_pipeline(
+                candidates_path=candidates_path,
+                job=jd,
+                weights=weights,
+                max_candidates=max_candidates,
+                top_n=100,
+                use_sample=use_sample_flag,
+            )
+            
+            if "error" in result:
+                TASK_STATUS[task_id]["status"] = "error"
+                TASK_STATUS[task_id]["message"] = result["error"]
+                return
+                
+            TASK_STATUS[task_id]["progress"] = 75
+            TASK_STATUS[task_id]["message"] = "Saving rankings..."
+            
+            stats = result["stats"]
+            ranked = result["ranked"]
 
-    stats = result["stats"]
-    ranked = result["ranked"]
+            # Save run to DB
+            run = RankingRun(
+                job_title=job_title,
+                total_candidates=stats["total_candidates"],
+                duration_sec=stats["duration_sec"],
+                avg_score=stats["avg_score"],
+                max_score=stats["max_score"],
+                status="completed",
+            )
+            run.set_stats(stats)
+            run.save()
 
-    # Save run to DB
-    run = RankingRun(
-        job_title=job_title,
-        total_candidates=stats["total_candidates"],
-        duration_sec=stats["duration_sec"],
-        avg_score=stats["avg_score"],
-        max_score=stats["max_score"],
-        status="completed",
-    )
-    run.set_stats(stats)
-    run.save()
+            # Save CSV to media
+            csv_path = Path(settings.MEDIA_ROOT) / "submissions" / f"submission_{run.pk}.csv"
+            write_submission_csv(result["submission_rows"], csv_path)
+            run.submission_csv.name = f"submissions/submission_{run.pk}.csv"
+            run.save()
 
-    # Save CSV to media
-    csv_path = Path(settings.MEDIA_ROOT) / "submissions" / f"submission_{run.pk}.csv"
-    write_submission_csv(result["submission_rows"], csv_path)
-    run.submission_csv.name = f"submissions/submission_{run.pk}.csv"
-    run.save()
+            # Save top-100 candidates
+            for item in ranked:
+                RankedCandidate.objects.create(
+                    run=run,
+                    rank=item["rank"],
+                    candidate_id=item["candidate_id"],
+                    score=item["score"],
+                    raw_score=item.get("raw_score", item["score"]),
+                    reasoning=item["reasoning"],
+                    profile_json=json.dumps(item.get("profile", {})),
+                    components_json=json.dumps(item.get("components", {})),
+                    signals_json=json.dumps(item.get("signals", {})),
+                )
+                
+            TASK_STATUS[task_id]["status"] = "completed"
+            TASK_STATUS[task_id]["progress"] = 100
+            TASK_STATUS[task_id]["redirect_url"] = f"/results/{run.pk}/"
 
-    # Save top-100 candidates
-    for item in ranked:
-        RankedCandidate.objects.create(
-            run=run,
-            rank=item["rank"],
-            candidate_id=item["candidate_id"],
-            score=item["score"],
-            raw_score=item.get("raw_score", item["score"]),
-            reasoning=item["reasoning"],
-            profile_json=json.dumps(item.get("profile", {})),
-            components_json=json.dumps(item.get("components", {})),
-            signals_json=json.dumps(item.get("signals", {})),
-        )
+        except Exception as e:
+            TASK_STATUS[task_id]["status"] = "error"
+            TASK_STATUS[task_id]["message"] = str(e)
+        finally:
+            if data_source == "upload" and tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+    # Start the thread
+    threading.Thread(target=background_task).start()
 
     return JsonResponse({
         "success": True,
-        "run_id": run.pk,
-        "total_candidates": stats["total_candidates"],
-        "duration_sec": stats["duration_sec"],
-        "top_candidate": ranked[0]["candidate_id"] if ranked else None,
-        "redirect_url": f"/results/{run.pk}/",
+        "task_id": task_id
     })
+
+def task_status(request, task_id):
+    """Poll endpoint for async task."""
+    status = TASK_STATUS.get(task_id, {"status": "error", "message": "Task not found"})
+    return JsonResponse(status)
 
 
 def download_submission(request, run_id):

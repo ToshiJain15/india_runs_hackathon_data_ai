@@ -432,14 +432,11 @@ function runRanker() {
   .then(r => r.json())
   .then(data => {
     clearInterval(interval);
-    if (data.success) {
-      progressBar.style.width = '100%';
-      progressText.textContent = `✓ Done! ${data.total_candidates} candidates ranked in ${data.duration_sec}s`;
-      progressBar.style.background = 'linear-gradient(90deg, #059669, #10b981)';
-      showToast(`Ranking complete! Top candidate: ${data.top_candidate}`, 'success');
-      setTimeout(() => { window.location = data.redirect_url; }, 1500);
+    if (data.success && data.task_id) {
+      // Begin polling status
+      pollStatus(data.task_id);
     } else {
-      showToast(data.error || 'Ranking failed', 'error');
+      showToast(data.error || 'Ranking failed to start', 'error');
       resetBtn();
     }
   })
@@ -448,6 +445,31 @@ function runRanker() {
     showToast('Network error: ' + err.message, 'error');
     resetBtn();
   });
+  
+  function pollStatus(taskId) {
+    fetch('/api/status/' + taskId + '/')
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'started' || data.status === 'running' || data.status === undefined) {
+          progressBar.style.width = (data.progress || 10) + '%';
+          progressText.textContent = data.message || 'Processing...';
+          setTimeout(() => pollStatus(taskId), 500);
+        } else if (data.status === 'completed') {
+          progressBar.style.width = '100%';
+          progressText.textContent = `✓ Done! Ranked candidates successfully.`;
+          progressBar.style.background = 'linear-gradient(90deg, #059669, #10b981)';
+          showToast(`Ranking complete!`, 'success');
+          setTimeout(() => { window.location = data.redirect_url; }, 1500);
+        } else {
+          showToast(data.message || 'Task failed', 'error');
+          resetBtn();
+        }
+      })
+      .catch(err => {
+        showToast('Polling error: ' + err.message, 'error');
+        resetBtn();
+      });
+  }
 
   function resetBtn() {
     btn.disabled = false;
