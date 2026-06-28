@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Redrob AI Candidate Ranker — Intelligent Candidate Discovery & Ranking powered by AI/ML"/>
+  <title>{% block title %}Redrob AI Ranker{% endblock %}</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/style.css' %}"/>
+  <style>
+    /* Ultra-Premium Professional LIGHT UI Overrides (Stripe/Notion inspired) */
+    :root {
+      --bg-color: #F9FAFB;
+      --bg-1: #F9FAFB;
+      --bg-2: #FFFFFF;
+      --bg-3: #F3F4F6;
+      
+      --card-bg: #FFFFFF;
+      --card-border: #E5E7EB;
+      --glass-bg: #FFFFFF;
+      --glass-border: #E5E7EB;
+      
+      --text-main: #111827;
+      --text-primary: #111827;
+      --text-secondary: #374151;
+      --text-muted: #6B7280;
+      
+      --primary: #2563EB;
+      --primary-hover: #1D4ED8;
+      
+      /* Adjusting component colors for light mode */
+      --purple: #8B5CF6; --purple-light: #6D28D9;
+      --blue: #3B82F6; --blue-light: #2563EB;
+      --green: #10B981; --green-light: #059669;
+      --orange: #F59E0B; --orange-light: #D97706;
+      --pink: #EC4899; --pink-light: #DB2777;
+    }
+    body {
+      background-color: var(--bg-color) !important;
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background-image: none !important;
+    }
+    
+    /* Remove the dark animated background */
+    .bg-mesh { display: none !important; }
+    
+    /* Clean, Professional Cards */
+    .glass, .panel, .results-header, .filter-bar, .table-container {
+      background: var(--card-bg) !important;
+      border: 1px solid var(--card-border) !important;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
+      backdrop-filter: none !important;
+      border-radius: 12px;
+    }
+    
+    .stat-card {
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      background: #FFFFFF;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: #CBD5E1 !important;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* Typography refinements */
+    h1, h2, h3, h4, h5, h6, .panel-title, .brand-name {
+      letter-spacing: -0.02em;
+      font-weight: 600;
+      color: #111827;
+    }
+    
+    .stat-label, .run-meta, .arch-desc, .comp-lbl, .nav-link span {
+      color: var(--text-muted) !important;
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      border-right: 1px solid var(--card-border);
+      background: #FFFFFF !important;
+    }
+    
+    .sidebar-brand, .sidebar-footer {
+      border-color: var(--card-border) !important;
+    }
+    
+    .brand-name { color: #111827 !important; }
+    
+    .nav-item.active .nav-link {
+      color: var(--primary) !important;
+      background: rgba(37, 99, 235, 0.1) !important;
+      box-shadow: none !important;
+    }
+    .nav-item.active .nav-link::before {
+      background: var(--primary) !important;
+    }
+    
+    .top-bar { 
+      background: #FFFFFF !important; 
+      border-bottom: 1px solid var(--card-border) !important; 
+    }
+    .top-bar-title { color: #111827 !important; }
+    
+    /* Buttons */
+    .run-btn, .btn-primary {
+      background: var(--primary);
+      color: #FFFFFF;
+      border-radius: 8px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      transition: all 0.2s ease;
+      border: none;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+    }
+    .run-btn:hover, .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.3);
+    }
+    
+    /* Beautiful Upload Dropzone */
+    .upload-dropzone {
+      position: relative;
+      margin-top: 24px;
+      padding: 32px 24px;
+      border: 2px dashed #CBD5E1;
+      border-radius: 12px;
+      background: #F8FAFC;
+      text-align: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .upload-dropzone:hover, .upload-dropzone.has-file {
+      border-color: #3B82F6;
+      background: #EFF6FF;
+    }
+    .dz-icon {
+      color: #94A3B8;
+      width: 40px; height: 40px;
+      margin: 0 auto 12px auto;
+    }
+    .upload-dropzone:hover .dz-icon, .upload-dropzone.has-file .dz-icon { color: #3B82F6; }
+    .dz-title { display: block; font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+    .dz-sub { display: block; font-size: 13px; color: #64748B; }
+    .dz-input {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0; cursor: pointer;
+    }
+    
+    /* Range Sliders */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      margin-top: -6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform 0.1s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: #E2E8F0;
+      border-radius: 2px;
+    }
+    input[type=range]:focus { outline: none; }
+    
+    .weight-item { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .weight-item label { width: 100px; font-size: 13px; font-weight: 500; color: #475569; }
+    .weight-val { background: #F1F5F9 !important; color: #0F172A !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; min-width: 52px; text-align: center; }
+    
+    /* Input Fields */
+    .form-input {
+      background: #FFFFFF;
+      border: 1px solid #D1D5DB;
+      color: #111827;
+    }
+    .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    
+    .weight-val { background: #F3F4F6; color: #111827; }
+    
+    .top-bar { background: #FFFFFF; border-bottom: 1px solid var(--card-border); }
+    
+    /* ── Full Mobile Responsive ────────────── */
+    @media (max-width: 768px) {
+      :root { --sidebar-w: 0px; }
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease !important;
+        z-index: 200;
+        width: 260px !important;
+      }
+      .sidebar.mobile-open { transform: translateX(0) !important; }
+      .main-content { margin-left: 0 !important; }
+      .page-content { padding: 16px !important; }
+      .dashboard-grid { grid-template-columns: 1fr !important; }
+      .stats-grid { grid-template-columns: 1fr 1fr !important; }
+      .charts-grid { grid-template-columns: 1fr !important; }
+      .results-header { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+      .results-stats { flex-wrap: wrap !important; gap: 14px !important; }
+      .filter-bar { flex-direction: column !important; gap: 10px !important; }
+      .col-components, .col-reasoning { display: none !important; }
+      .mobile-overlay { display: block !important; }
+    }
+    .mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 199; }
+  </style>
+</head>
+<body>
+
+<!-- Animated Background -->
+<div class="bg-mesh"></div>
+<!-- Mobile Overlay -->
+<div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileSidebar()"></div>
+
+<!-- Sidebar Navigation -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <span class="brand-name">Redrob</span>
+      <span class="brand-sub">AI Ranker</span>
+    </div>
+  </div>
+
+  <ul class="nav-list">
+    <li class="nav-item {% block nav_dashboard %}{% endblock %}">
+      <a href="/" class="nav-link" id="nav-dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span>Dashboard</span>
+      </a>
+    </li>
+    <li class="nav-item {% block nav_results %}{% endblock %}">
+      <a href="/results/" class="nav-link" id="nav-results">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>Rankings</span>
+      </a>
+    </li>
+    <li class="nav-item {% block nav_analytics %}{% endblock %}">
+      <a href="/analytics/" class="nav-link" id="nav-analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        <span>Analytics</span>
+      </a>
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">
+    <div class="challenge-badge">
+      <span class="badge-dot"></span>
+      <span>India Runs Challenge</span>
+    </div>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main class="main-content">
+  <header class="top-bar">
+    <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="top-bar-title">{% block page_title %}Dashboard{% endblock %}</div>
+    <div class="top-bar-actions">
+      <div class="status-chip">
+        <span class="status-dot"></span>
+        <span>Live</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-content">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<script src="{% static 'js/app.js' %}"></script>
+<script>
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobile-overlay');
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    sidebar.classList.toggle('mobile-open');
+    if (overlay) overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
+  } else {
+    sidebar.classList.toggle('collapsed');
+    document.querySelector('.main-content').classList.toggle('expanded');
+  }
+}
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  const overlay = document.getElementById('mobile-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,295 @@
+{% extends "ranker/base.html" %}
+{% block title %}Rankings — Redrob AI Ranker{% endblock %}
+{% block nav_results %}active{% endblock %}
+{% block page_title %}Top 100 Rankings{% endblock %}
+
+{% block content %}
+<!-- Results Header -->
+<div class="results-header glass">
+  <div class="results-meta">
+    <div class="results-title">
+      <span class="rank-badge-hero">Run #{{ run.pk }}</span>
+      <h1>{{ run.job_title }}</h1>
+    </div>
+    <div class="results-stats">
+      <div class="r-stat">
+        <span class="r-stat-val">{{ stats.total_candidates|default:0 }}</span>
+        <span class="r-stat-lbl">Candidates Scored</span>
+      </div>
+      <div class="r-stat">
+        <span class="r-stat-val">{{ stats.duration_sec|default:0 }}s</span>
+        <span class="r-stat-lbl">Runtime</span>
+      </div>
+      <div class="r-stat">
+        <span class="r-stat-val">{{ stats.avg_score|default:0 }}</span>
+        <span class="r-stat-lbl">Avg Score</span>
+      </div>
+      <div class="r-stat">
+        <span class="r-stat-val">{{ total }}</span>
+        <span class="r-stat-lbl">Ranked</span>
+      </div>
+    </div>
+  </div>
+  <div class="results-actions">
+    <a href="/analytics/{{ run.pk }}/" class="btn-secondary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </a>
+    <a href="/download/{{ run.pk }}/" class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download CSV
+    </a>
+  </div>
+</div>
+
+<!-- Search + Filter Bar -->
+<div class="filter-bar glass">
+  <div class="search-box">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="search-input" placeholder="Search by ID, title, reasoning..." oninput="filterTable()"/>
+  </div>
+  <div class="filter-pills">
+    <span class="filter-pill active" onclick="filterByScore('all', this)">All</span>
+    <span class="filter-pill" onclick="filterByScore('high', this)">Score ≥ 0.8</span>
+    <span class="filter-pill" onclick="filterByScore('mid', this)">Score 0.5–0.8</span>
+    <span class="filter-pill" onclick="filterByScore('low', this)">Score &lt; 0.5</span>
+  </div>
+</div>
+
+<!-- Rankings Table -->
+<div class="table-container glass">
+  <table class="results-table" id="results-table">
+    <thead>
+      <tr>
+        <th class="col-rank">Rank</th>
+        <th class="col-id">Candidate ID</th>
+        <th class="col-score">Score</th>
+        <th class="col-components">Component Scores</th>
+        <th class="col-reasoning">Reasoning</th>
+        <th class="col-actions">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cand in candidates %}
+      {% with comps=cand.get_components signals=cand.get_signals profile=cand.get_profile %}
+      <tr class="result-row" data-score="{{ cand.score }}" data-id="{{ cand.candidate_id }}" data-reasoning="{{ cand.reasoning|striptags|lower }}">
+        <td class="col-rank">
+          {% if cand.rank == 1 %}
+            <div class="rank-medal gold">🥇</div>
+          {% elif cand.rank == 2 %}
+            <div class="rank-medal silver">🥈</div>
+          {% elif cand.rank == 3 %}
+            <div class="rank-medal bronze">🥉</div>
+          {% else %}
+            <div class="rank-num">#{{ cand.rank }}</div>
+          {% endif %}
+        </td>
+        <td class="col-id">
+          <div class="cand-id-cell">
+            <span class="cand-id">{{ cand.candidate_id }}</span>
+            {% if profile.current_title %}
+            <span class="cand-title-small">{{ profile.current_title }}</span>
+            {% endif %}
+          </div>
+        </td>
+        <td class="col-score">
+          <div class="score-display">
+            <div class="score-ring" style="--score: {{ cand.score }}">
+              <span class="score-num">{{ cand.score|floatformat:2 }}</span>
+            </div>
+            <div class="score-bar-mini">
+              <div class="score-bar-fill" style="width: {{ cand.score|floatformat:0 }}%; transform: scaleX({{ cand.score }})"></div>
+            </div>
+          </div>
+        </td>
+        <td class="col-components">
+          <div class="comp-bars">
+            <div class="comp-bar-item" title="Skill Match: {{ comps.skill_score }}">
+              <span class="comp-lbl">Skill</span>
+              <div class="comp-bar-track">
+                <div class="comp-bar-fill purple" style="width: calc({{ comps.skill_score|default:0 }} * 100%)"></div>
+              </div>
+              <span class="comp-val">{{ comps.skill_score|floatformat:2 }}</span>
+            </div>
+            <div class="comp-bar-item" title="Title & Career: {{ comps.title_career_score }}">
+              <span class="comp-lbl">Title</span>
+              <div class="comp-bar-track">
+                <div class="comp-bar-fill blue" style="width: calc({{ comps.title_career_score|default:0 }} * 100%)"></div>
+              </div>
+              <span class="comp-val">{{ comps.title_career_score|floatformat:2 }}</span>
+            </div>
+            <div class="comp-bar-item" title="Experience: {{ comps.experience_score }}">
+              <span class="comp-lbl">Exp</span>
+              <div class="comp-bar-track">
+                <div class="comp-bar-fill green" style="width: calc({{ comps.experience_score|default:0 }} * 100%)"></div>
+              </div>
+              <span class="comp-val">{{ comps.experience_score|floatformat:2 }}</span>
+            </div>
+            <div class="comp-bar-item" title="Education: {{ comps.education_score }}">
+              <span class="comp-lbl">Edu</span>
+              <div class="comp-bar-track">
+                <div class="comp-bar-fill orange" style="width: calc({{ comps.education_score|default:0 }} * 100%)"></div>
+              </div>
+              <span class="comp-val">{{ comps.education_score|floatformat:2 }}</span>
+            </div>
+            <div class="comp-bar-item" title="Platform Signals: {{ comps.signal_score }}">
+              <span class="comp-lbl">Sig</span>
+              <div class="comp-bar-track">
+                <div class="comp-bar-fill pink" style="width: calc({{ comps.signal_score|default:0 }} * 100%)"></div>
+              </div>
+              <span class="comp-val">{{ comps.signal_score|floatformat:2 }}</span>
+            </div>
+          </div>
+        </td>
+        <td class="col-reasoning">
+          <p class="reasoning-text">{{ cand.reasoning|safe }}</p>
+        </td>
+        <td class="col-actions">
+          <button class="detail-btn" onclick="showDetail('{{ cand.candidate_id }}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+        </td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Candidate Detail Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
+  <div class="modal-card glass" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modal-content">
+      <div class="modal-loading">
+        <div class="spinner"></div>
+        <p>Loading candidate data...</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let scoreFilter = 'all';
+let searchVal = '';
+
+function filterTable() {
+  searchVal = document.getElementById('search-input').value.toLowerCase();
+  applyFilters();
+}
+
+function filterByScore(level, el) {
+  scoreFilter = level;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  document.querySelectorAll('.result-row').forEach(row => {
+    const score = parseFloat(row.dataset.score);
+    const id = row.dataset.id.toLowerCase();
+    const reasoning = row.dataset.reasoning;
+
+    let scoreOk = true;
+    if (scoreFilter === 'high') scoreOk = score >= 0.8;
+    else if (scoreFilter === 'mid') scoreOk = score >= 0.5 && score < 0.8;
+    else if (scoreFilter === 'low') scoreOk = score < 0.5;
+
+    const searchOk = !searchVal || id.includes(searchVal) || reasoning.includes(searchVal);
+
+    row.style.display = (scoreOk && searchOk) ? '' : 'none';
+  });
+}
+
+function showDetail(candidateId) {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-loading"><div class="spinner"></div><p>Loading...</p></div>
+  `;
+
+  fetch('/api/candidate/' + candidateId + '/')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('modal-content').innerHTML = `<p class="error-msg">${data.error}</p>`;
+        return;
+      }
+      renderDetail(data);
+    })
+    .catch(err => {
+      document.getElementById('modal-content').innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+    });
+}
+
+function renderDetail(d) {
+  const comps = d.components || {};
+  const profile = d.profile || {};
+  const signals = d.signals || {};
+
+  const compRows = Object.entries(comps).map(([k, v]) => {
+    const pct = Math.round(v * 100);
+    const label = k.replace(/_/g, ' ').replace('score', '').trim();
+    return `
+      <div class="detail-comp-row">
+        <span class="detail-comp-lbl">${label}</span>
+        <div class="detail-comp-bar">
+          <div class="detail-comp-fill" style="width:${pct}%"></div>
+        </div>
+        <span class="detail-comp-val">${Number(v).toFixed(2)}</span>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('modal-content').innerHTML = `
+    <div class="detail-header" style="padding-right: 36px; padding-top: 4px;">
+      <div class="detail-id">${d.candidate_id}</div>
+      <div class="detail-rank">Rank #${d.rank}</div>
+      <div class="detail-score-big">${Number(d.score).toFixed(2)}</div>
+    </div>
+    ${profile.current_title ? `<div class="detail-title">${profile.current_title} @ ${profile.current_company || '—'}</div>` : ''}
+    ${profile.location ? `<div class="detail-loc">📍 ${profile.location}, ${profile.country || ''}</div>` : ''}
+    ${profile.years_of_experience !== undefined ? `<div class="detail-exp">⏱ ${profile.years_of_experience} years experience</div>` : ''}
+
+    <div class="detail-section">
+      <h4>Component Scores</h4>
+      <div class="detail-comps">${compRows}</div>
+    </div>
+
+    <div class="detail-section">
+      <h4>Reasoning</h4>
+      <p class="detail-reasoning">${d.reasoning}</p>
+    </div>
+
+    ${signals.open_to_work_flag !== undefined ? `
+    <div class="detail-signals">
+      <span class="signal-chip ${signals.open_to_work_flag ? 'green' : 'gray'}">
+        ${signals.open_to_work_flag ? '✓ Open to Work' : '✗ Not Open to Work'}
+      </span>
+      <span class="signal-chip ${signals.verified_email ? 'green' : 'gray'}">
+        ${signals.verified_email ? '✓ Email Verified' : '✗ Email'}
+      </span>
+      <span class="signal-chip ${signals.linkedin_connected ? 'blue' : 'gray'}">
+        ${signals.linkedin_connected ? '✓ LinkedIn' : '✗ LinkedIn'}
+      </span>
+      <span class="signal-chip">
+        GitHub: ${signals.github_activity_score >= 0 ? signals.github_activity_score : 'N/A'}
+      </span>
+      <span class="signal-chip">
+        Notice: ${signals.notice_period_days || '—'}d
+      </span>
+      ${signals.expected_salary_range_inr_lpa ? `
+      <span class="signal-chip purple">
+        💰 ${signals.expected_salary_range_inr_lpa.min}–${signals.expected_salary_range_inr_lpa.max} LPA
+      </span>` : ''}
+    </div>` : ''}
+  `;
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+</script>
+{% endblock %}

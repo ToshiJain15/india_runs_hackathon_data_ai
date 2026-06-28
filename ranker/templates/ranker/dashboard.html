@@ -1,0 +1,475 @@
+{% extends "ranker/base.html" %}
+{% block title %}Dashboard — Redrob AI Ranker{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}Command Center{% endblock %}
+
+{% block content %}
+<!-- Hero Stats Row -->
+<div class="stats-grid">
+  <div class="stat-card glass" data-aos="fade-up">
+    <div class="stat-icon icon-purple">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-total">
+        {{ latest_stats.total_candidates|default:"—" }}
+      </div>
+      <div class="stat-label">Total Candidates</div>
+    </div>
+    <div class="stat-trend up">+{{ latest_stats.scored_candidates|default:0 }} scored</div>
+  </div>
+
+  <div class="stat-card glass" data-aos="fade-up" data-aos-delay="100">
+    <div class="stat-icon icon-blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-avg">
+        {{ latest_stats.avg_score|floatformat:2|default:"—" }}
+      </div>
+      <div class="stat-label">Avg Score</div>
+    </div>
+    <div class="stat-trend {% if latest_stats.avg_score %}up{% endif %}">
+      Max: {{ latest_stats.max_score|floatformat:2|default:"—" }}
+    </div>
+  </div>
+
+  <div class="stat-card glass" data-aos="fade-up" data-aos-delay="200">
+    <div class="stat-icon icon-green">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-time">
+        {% if latest_stats.duration_sec %}{{ latest_stats.duration_sec }}s{% else %}—{% endif %}
+      </div>
+      <div class="stat-label">Last Run Time</div>
+    </div>
+    <div class="stat-trend">Ranking speed</div>
+  </div>
+
+  <div class="stat-card glass" data-aos="fade-up" data-aos-delay="300">
+    <div class="stat-icon icon-orange">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    </div>
+    <div class="stat-info">
+      <div class="stat-value">{{ total_runs }}</div>
+      <div class="stat-label">Total Runs</div>
+    </div>
+    <div class="stat-trend">Historical runs</div>
+  </div>
+</div>
+
+<!-- Main Grid -->
+<div class="dashboard-grid">
+
+  <!-- Ranker Panel -->
+  <div class="panel glass ranker-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        Run AI Ranker
+      </h2>
+      <span class="panel-badge">ML Pipeline</span>
+    </div>
+
+    <div class="ranker-form">
+      <div class="form-group">
+        <label class="form-label">Job Title</label>
+        <input type="text" id="job-title" class="form-input" value="AI/ML Engineer" placeholder="e.g. Senior ML Engineer"/>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" style="display:flex; align-items:center; justify-content:space-between;">
+          <span>Paste Job Description <span style="font-size:11px; color: var(--primary); font-weight:500;">(Optional — auto-parses skills & requirements)</span></span>
+          <button type="button" onclick="document.getElementById('jd-text').value=''" style="border:none; background:none; color:var(--text-muted); font-size:11px; cursor:pointer;">Clear</button>
+        </label>
+        <textarea id="jd-text" class="form-input" rows="4" placeholder="Paste a full Job Description here. The engine will extract required skills, experience range, and role type automatically. Leave blank to use defaults." style="resize:vertical; font-size:13px; line-height:1.6;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Data Source</label>
+        <div class="toggle-group" style="flex-wrap: wrap;">
+          <button class="toggle-btn active" id="btn-sample" onclick="setDataSource('sample')">
+            Sample (~100)
+          </button>
+          <button class="toggle-btn" id="btn-full" onclick="setDataSource('full')">
+            Full Dataset (~50K)
+            {% if not candidates_exist %}<span class="badge-warn">Missing</span>{% endif %}
+          </button>
+        </div>
+      </div>
+
+      <div class="upload-dropzone" id="upload-dropzone">
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="dz-text">
+          <span class="dz-title" id="dz-title">Upload CV (PDF) or Candidate Pool (JSON)</span>
+          <span class="dz-sub" id="dz-sub">Drag and drop, or click to browse files</span>
+        </div>
+        <input type="file" id="candidate-upload" class="dz-input" accept=".json,.jsonl,.pdf,.txt" onchange="handleFileSelect(this)" />
+      </div>
+
+      {% if not candidates_exist %}
+      <div class="alert-info" id="full-data-warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span><code>candidates.jsonl</code> not found. Using sample data. Place the full file at:<br>
+        <code>{{ candidates_path }}</code></span>
+      </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label class="form-label">Component Weights</label>
+        <div class="weights-grid">
+          <div class="weight-item">
+            <label>Skills</label>
+            <input type="range" id="w-skills" min="0" max="100" value="40" oninput="updateWeightLabel(this, 'lbl-skills')"/>
+            <span class="weight-val" id="lbl-skills">40%</span>
+          </div>
+          <div class="weight-item">
+            <label>Title/Career</label>
+            <input type="range" id="w-title" min="0" max="100" value="25" oninput="updateWeightLabel(this, 'lbl-title')"/>
+            <span class="weight-val" id="lbl-title">25%</span>
+          </div>
+          <div class="weight-item">
+            <label>Experience</label>
+            <input type="range" id="w-exp" min="0" max="100" value="15" oninput="updateWeightLabel(this, 'lbl-exp')"/>
+            <span class="weight-val" id="lbl-exp">15%</span>
+          </div>
+          <div class="weight-item">
+            <label>Education</label>
+            <input type="range" id="w-edu" min="0" max="100" value="10" oninput="updateWeightLabel(this, 'lbl-edu')"/>
+            <span class="weight-val" id="lbl-edu">10%</span>
+          </div>
+          <div class="weight-item">
+            <label>Signals</label>
+            <input type="range" id="w-sig" min="0" max="100" value="10" oninput="updateWeightLabel(this, 'lbl-sig')"/>
+            <span class="weight-val" id="lbl-sig">10%</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="run-btn" id="run-btn" onclick="runRanker()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span id="run-btn-text">Launch Ranking Pipeline</span>
+      </button>
+
+      <!-- Progress -->
+      <div class="progress-container" id="progress-container" style="display:none">
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="progress-text" id="progress-text">Initializing pipeline...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Runs -->
+  <div class="panel glass">
+    <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 class="panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        Recent Runs
+      </h2>
+      {% if latest_run %}
+      <a href="/download/{{ latest_run.pk }}/" class="btn-primary" style="padding: 6px 12px; font-size: 0.85rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download CSV
+      </a>
+      {% endif %}
+    </div>
+    <div class="runs-list">
+      {% if runs %}
+        {% for run in runs %}
+        <div class="run-item" onclick="window.location='/results/{{ run.pk }}/'">
+          <div class="run-rank-badge">#{{ run.pk }}</div>
+          <div class="run-info">
+            <div class="run-title">{{ run.job_title }}</div>
+            <div class="run-meta">
+              {{ run.total_candidates|default:0 }} candidates · {{ run.duration_sec }}s
+            </div>
+          </div>
+          <div class="run-score">
+            <div class="score-pill">{{ run.avg_score|floatformat:2 }}</div>
+            <div class="run-date">{{ run.created_at|date:"M d, H:i" }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+          <p>No runs yet. Launch the pipeline above!</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Top Skills Preview -->
+  {% if latest_stats.top_skills %}
+  <div class="panel glass skills-panel">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        Top Skills in Pool
+      </h2>
+    </div>
+    <div class="skills-cloud">
+      {% for skill, count in latest_stats.top_skills %}
+      <div class="skill-tag" style="--skill-size: {{ count }}">
+        <span>{{ skill }}</span>
+        <span class="skill-count">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Pipeline Architecture -->
+  <div class="panel glass">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+        </svg>
+        Scoring Architecture
+      </h2>
+    </div>
+    <div class="arch-list">
+      <div class="arch-item">
+        <div class="arch-bar" id="arch-bar-skills" style="--w: 40%; --clr: #7c3aed"></div>
+        <div class="arch-label">Skill Match</div>
+        <div class="arch-pct" id="arch-pct-skills">40%</div>
+        <div class="arch-desc">Proficiency × endorsement trust × duration</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-bar" id="arch-bar-title" style="--w: 25%; --clr: #2563eb"></div>
+        <div class="arch-label">Title + Career</div>
+        <div class="arch-pct" id="arch-pct-title">25%</div>
+        <div class="arch-desc">Semantic title relevance + progression</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-bar" id="arch-bar-exp" style="--w: 15%; --clr: #059669"></div>
+        <div class="arch-label">Experience</div>
+        <div class="arch-pct" id="arch-pct-exp">15%</div>
+        <div class="arch-desc">Optimal range bonus + overqualification</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-bar" id="arch-bar-edu" style="--w: 10%; --clr: #d97706"></div>
+        <div class="arch-label">Education</div>
+        <div class="arch-pct" id="arch-pct-edu">10%</div>
+        <div class="arch-desc">Institution tier + degree + field</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-bar" id="arch-bar-sig" style="--w: 10%; --clr: #db2777"></div>
+        <div class="arch-label">Platform Signals</div>
+        <div class="arch-pct" id="arch-pct-sig">10%</div>
+        <div class="arch-desc">GitHub · response rate · verification</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast Notification -->
+<div class="toast" id="toast"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let dataSource = 'sample';
+
+function handleFileSelect(input) {
+  if (input.files && input.files[0]) {
+    document.getElementById('upload-dropzone').classList.add('has-file');
+    document.getElementById('dz-title').innerText = input.files[0].name;
+    document.getElementById('dz-sub').innerText = (input.files[0].size / 1024).toFixed(1) + ' KB selected. Ready to run.';
+    
+    // Clear data source toggles
+    document.getElementById('btn-sample').classList.remove('active');
+    document.getElementById('btn-full').classList.remove('active');
+    dataSource = 'upload';
+    
+    const warning = document.getElementById('full-data-warning');
+    if (warning) warning.style.display = 'none';
+  }
+}
+
+function setDataSource(source) {
+  const fileInput = document.getElementById('candidate-upload');
+  if(fileInput) {
+    fileInput.value = '';
+    document.getElementById('upload-dropzone').classList.remove('has-file');
+    document.getElementById('dz-title').innerText = 'Upload CV (PDF) or Candidate Pool (JSON)';
+    document.getElementById('dz-sub').innerText = 'Drag and drop, or click to browse files';
+  }
+  dataSource = source;
+  document.getElementById('btn-sample').classList.toggle('active', source === 'sample');
+  document.getElementById('btn-full').classList.toggle('active', source === 'full');
+  
+  const warning = document.getElementById('full-data-warning');
+  if (warning) warning.style.display = source === 'full' ? 'flex' : 'none';
+}
+
+const ARCH_MAP = {
+  'w-skills': ['arch-bar-skills', 'arch-pct-skills'],
+  'w-title':  ['arch-bar-title',  'arch-pct-title'],
+  'w-exp':    ['arch-bar-exp',    'arch-pct-exp'],
+  'w-edu':    ['arch-bar-edu',    'arch-pct-edu'],
+  'w-sig':    ['arch-bar-sig',    'arch-pct-sig'],
+};
+
+function updateWeightLabel(el, labelId) {
+  const val = parseInt(el.value);
+  document.getElementById(labelId).textContent = val + '%';
+  // Sync Architecture visualization bars
+  const ids = ARCH_MAP[el.id];
+  if (ids) {
+    const bar = document.getElementById(ids[0]);
+    const pct = document.getElementById(ids[1]);
+    if (bar) bar.style.setProperty('--w', val + '%');
+    if (pct) pct.textContent = val + '%';
+  }
+}
+
+function runRanker() {
+  const btn = document.getElementById('run-btn');
+  const btnText = document.getElementById('run-btn-text');
+  const progress = document.getElementById('progress-container');
+  const progressBar = document.getElementById('progress-bar');
+  const progressText = document.getElementById('progress-text');
+
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btnText.textContent = 'Running Pipeline...';
+  progress.style.display = 'block';
+
+  // Animated progress
+  let pct = 0;
+  const stages = [
+    [5, 'Loading candidate profiles...'],
+    [25, 'Computing skill match scores...'],
+    [50, 'Evaluating career trajectories...'],
+    [70, 'Analyzing behavioral signals...'],
+    [85, 'Finalizing rankings...'],
+    [95, 'Generating submission CSV...'],
+  ];
+  let stageIdx = 0;
+
+  const interval = setInterval(() => {
+    if (stageIdx < stages.length) {
+      const [target, msg] = stages[stageIdx];
+      if (pct < target) {
+        pct += 2;
+        progressBar.style.width = pct + '%';
+        progressText.textContent = msg;
+      } else {
+        stageIdx++;
+      }
+    }
+  }, 120);
+
+  const weights = {
+    skills: parseInt(document.getElementById('w-skills').value) / 100,
+    title_career: parseInt(document.getElementById('w-title').value) / 100,
+    experience: parseInt(document.getElementById('w-exp').value) / 100,
+    education: parseInt(document.getElementById('w-edu').value) / 100,
+    signals: parseInt(document.getElementById('w-sig').value) / 100,
+  };
+  
+  const fd = new FormData();
+  fd.append('job_title', document.getElementById('job-title').value);
+  fd.append('jd_text', document.getElementById('jd-text').value);
+  fd.append('data_source', dataSource);
+  fd.append('weights', JSON.stringify(weights));
+  
+  if (dataSource === 'upload' || document.getElementById('candidate-upload').files.length > 0) {
+    const fileInput = document.getElementById('candidate-upload');
+    if (fileInput.files.length > 0) {
+      fd.append('file', fileInput.files[0]);
+      fd.set('data_source', 'upload'); // ensure backend knows it's an upload
+    } else {
+      showToast('Please select a file to upload.', 'error');
+      resetBtn();
+      clearInterval(interval);
+      return;
+    }
+  }
+
+  fetch('/api/run/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': getCookie('csrftoken')},
+    body: fd
+  })
+  .then(r => r.json())
+  .then(data => {
+    clearInterval(interval);
+    if (data.success) {
+      progressBar.style.width = '100%';
+      progressText.textContent = `✓ Done! ${data.total_candidates} candidates ranked in ${data.duration_sec}s`;
+      progressBar.style.background = 'linear-gradient(90deg, #059669, #10b981)';
+      showToast(`Ranking complete! Top candidate: ${data.top_candidate}`, 'success');
+      setTimeout(() => { window.location = data.redirect_url; }, 1500);
+    } else {
+      showToast(data.error || 'Ranking failed', 'error');
+      resetBtn();
+    }
+  })
+  .catch(err => {
+    clearInterval(interval);
+    showToast('Network error: ' + err.message, 'error');
+    resetBtn();
+  });
+
+  function resetBtn() {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btnText.textContent = 'Launch Ranking Pipeline';
+  }
+}
+
+function getCookie(name) {
+  let val = null;
+  document.cookie.split(';').forEach(c => {
+    c = c.trim();
+    if (c.startsWith(name + '=')) val = decodeURIComponent(c.slice(name.length + 1));
+  });
+  return val;
+}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => { t.className = 'toast'; }, 4000);
+}
+</script>
+{% endblock %}

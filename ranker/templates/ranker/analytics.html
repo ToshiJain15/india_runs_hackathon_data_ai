@@ -1,0 +1,251 @@
+{% extends "ranker/base.html" %}
+{% block title %}Analytics — Redrob AI Ranker{% endblock %}
+{% block nav_analytics %}active{% endblock %}
+{% block page_title %}Analytics & Insights{% endblock %}
+
+{% block content %}
+<div class="analytics-header glass">
+  <div>
+    <h2>Run #{{ run.pk }} · {{ run.job_title }}</h2>
+    <p>{{ stats.total_candidates|default:0 }} candidates · {{ stats.duration_sec|default:0 }}s runtime</p>
+  </div>
+  <a href="/results/{{ run.pk }}/" class="btn-secondary">← Back to Rankings</a>
+</div>
+
+<!-- Component Radar + Score Distribution -->
+<div class="charts-grid">
+  <div class="chart-panel glass">
+    <div class="panel-header">
+      <h3 class="panel-title">Score Distribution (All Candidates)</h3>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="distChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-panel glass">
+    <div class="panel-header">
+      <h3 class="panel-title">Average Component Scores (Top 100)</h3>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="radarChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Top Skills + Industries -->
+<div class="charts-grid">
+  <div class="chart-panel glass">
+    <div class="panel-header">
+      <h3 class="panel-title">Top Skills in Candidate Pool</h3>
+    </div>
+    <div class="chart-wrap chart-tall">
+      <canvas id="skillsChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-panel glass">
+    <div class="panel-header">
+      <h3 class="panel-title">Industry Distribution</h3>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="industryChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Score breakdown table for top-10 -->
+<div class="panel glass">
+  <div class="panel-header">
+    <h3 class="panel-title">Top 10 — Component Breakdown</h3>
+  </div>
+  <div class="table-container-inner">
+    <table class="analytics-table">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>ID</th>
+          <th>Final</th>
+          <th>Skills</th>
+          <th>Title/Career</th>
+          <th>Experience</th>
+          <th>Education</th>
+          <th>Signals</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cand in candidates|slice:":10" %}
+        {% with comps=cand.get_components %}
+        <tr>
+          <td><strong>#{{ cand.rank }}</strong></td>
+          <td class="mono">{{ cand.candidate_id }}</td>
+          <td><span class="score-badge">{{ cand.score }}</span></td>
+          <td>
+            <div class="mini-bar" style="--val: {{ comps.skill_score|default:0 }}">
+              <div class="mini-fill purple"></div>
+            </div>
+            {{ comps.skill_score|default:"—" }}
+          </td>
+          <td>
+            <div class="mini-bar" style="--val: {{ comps.title_career_score|default:0 }}">
+              <div class="mini-fill blue"></div>
+            </div>
+            {{ comps.title_career_score|default:"—" }}
+          </td>
+          <td>
+            <div class="mini-bar" style="--val: {{ comps.experience_score|default:0 }}">
+              <div class="mini-fill green"></div>
+            </div>
+            {{ comps.experience_score|default:"—" }}
+          </td>
+          <td>
+            <div class="mini-bar" style="--val: {{ comps.education_score|default:0 }}">
+              <div class="mini-fill orange"></div>
+            </div>
+            {{ comps.education_score|default:"—" }}
+          </td>
+          <td>
+            <div class="mini-bar" style="--val: {{ comps.signal_score|default:0 }}">
+              <div class="mini-fill pink"></div>
+            </div>
+            {{ comps.signal_score|default:"—" }}
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const distData = {{ score_dist_json|safe }};
+const topSkills = {{ top_skills_json|safe }};
+const topIndustries = {{ top_industries_json|safe }};
+const avgComps = {{ avg_components_json|safe }};
+
+// Chart default styles
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(148,163,184,0.1)';
+Chart.defaults.font.family = 'Inter, sans-serif';
+
+// Score Distribution (Bar)
+const distCtx = document.getElementById('distChart').getContext('2d');
+new Chart(distCtx, {
+  type: 'bar',
+  data: {
+    labels: distData.map(d => d.label),
+    datasets: [{
+      label: 'Candidates',
+      data: distData.map(d => d.count),
+      backgroundColor: distData.map((_, i) => `hsla(${240 + i * 15}, 80%, 65%, 0.8)`),
+      borderRadius: 6,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.raw} candidates (${distData[ctx.dataIndex]?.pct}%)`
+        }
+      }
+    },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(148,163,184,0.08)' } }
+    }
+  }
+});
+
+// Radar Chart (Component Averages)
+const radarCtx = document.getElementById('radarChart').getContext('2d');
+const compLabels = Object.keys(avgComps).map(k => k.replace(/_score$/, '').replace(/_/g, ' '));
+const compVals = Object.values(avgComps);
+new Chart(radarCtx, {
+  type: 'radar',
+  data: {
+    labels: compLabels,
+    datasets: [{
+      label: 'Avg Score',
+      data: compVals,
+      backgroundColor: 'rgba(124, 58, 237, 0.2)',
+      borderColor: 'rgba(124, 58, 237, 0.9)',
+      pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+      pointRadius: 5,
+      borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      r: {
+        min: 0, max: 1,
+        ticks: { stepSize: 0.2, backdropColor: 'transparent' },
+        grid: { color: 'rgba(148,163,184,0.15)' },
+        angleLines: { color: 'rgba(148,163,184,0.15)' },
+      }
+    }
+  }
+});
+
+// Top Skills (Horizontal Bar)
+const skillCtx = document.getElementById('skillsChart').getContext('2d');
+const skillNames = topSkills.map(s => s[0]);
+const skillCounts = topSkills.map(s => s[1]);
+new Chart(skillCtx, {
+  type: 'bar',
+  data: {
+    labels: skillNames,
+    datasets: [{
+      label: 'Occurrences',
+      data: skillCounts,
+      backgroundColor: skillNames.map((_, i) => `hsla(${260 + i * 8}, 70%, 60%, 0.85)`),
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: 'rgba(148,163,184,0.08)' } },
+      y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+    }
+  }
+});
+
+// Industry (Doughnut)
+const indCtx = document.getElementById('industryChart').getContext('2d');
+const indNames = topIndustries.map(i => i[0]);
+const indCounts = topIndustries.map(i => i[1]);
+new Chart(indCtx, {
+  type: 'doughnut',
+  data: {
+    labels: indNames,
+    datasets: [{
+      data: indCounts,
+      backgroundColor: indNames.map((_, i) => `hsla(${200 + i * 20}, 75%, 55%, 0.85)`),
+      borderWidth: 2,
+      borderColor: '#0f172a',
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } }
+    },
+    cutout: '60%',
+  }
+});
+</script>
+{% endblock %}
