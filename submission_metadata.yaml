@@ -1,0 +1,62 @@
+# Redrob Hackathon — Submission Metadata
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "solo warrior"
+
+primary_contact:
+  name: "solo warrior"
+  email: "solo.warrior@example.com"
+  phone: "+91-9999999999"
+
+team_members:
+  - name: "solo warrior"
+    email: "solo.warrior@example.com"
+    role: "Solo Participant / ML Engineer"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/jaint/India_runs_data_and_ai_challenge"
+sandbox_link: "http://localhost:8080"
+produce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "Windows 11 PC"
+  cpu_cores: 8
+  ram_gb: 16
+  python_version: "3.14.0"
+  os: "Windows 11"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: false
+  pre_computation_time_minutes: 0
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Gemini"
+  - "Cursor"
+
+ai_usage_summary: |
+  Used Gemini for code scaffolding, refactoring, background asset extraction, visual slide rendering, and automated PDF compilation. No candidate data was fed to any external LLM APIs.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Rule-based candidate scoring engine combining 5 dimensions: Skill Match (40%), Title + Career (25%), Years of Experience (15%), Education level and relevance (10%), and Platform Activity/Relocation Signals (10%). Features: (1) Dynamic JD Parser — paste any raw job description text to auto-extract skills, experience range, and role type for true multi-tenant operation. (2) Prodigy-Aware Scoring — PhD/Master's candidates with 0 YOE bypass the harsh junior penalty. (3) 4-check Honeypot Gate — impossible profiles zeroed to 0.0. (4) Consulting Firm Penalty — service-only career gets a 0.2x multiplier. (5) Production-ready Django deployment with PostgreSQL support via DATABASE_URL env var, CSRF protection, HSTS, WhiteNoise static serving, and Dockerfile. (6) Fully mobile-responsive UI with slide-in hamburger menu. Stream-loads 100K candidates line-by-line in under 50s on a single CPU core, using less than 500MB memory.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true
